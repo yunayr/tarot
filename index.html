@@ -229,7 +229,7 @@
         const aiModal = document.getElementById('ai-modal');
         const closeModalButton = document.getElementById('close-modal');
         const aiResponseContainer = document.getElementById('ai-response');
-        const userQuestionInput = document.getElementById('userQuestion'); // 取得問題輸入框
+        const userQuestionInput = document.getElementById('userQuestion');
         
         let currentResultText = '';
         let rawResultForAI = '';
@@ -348,7 +348,6 @@
             return cardElement;
         }
         
-        // 更新：呼叫 Gemini API 的函式，加入問題
         async function getAiInterpretation() {
             aiResponseContainer.innerHTML = '<div class="flex justify-center items-center p-8"><div class="spinner"></div><p class="ml-4">AI 正在為您解讀牌陣...</p></div>';
             
@@ -366,6 +365,7 @@
                 chatHistory.push({ role: "user", parts: [{ text: prompt }] });
                 const payload = { contents: chatHistory };
                 const apiKey = ""; // Canvas 會自動處理
+                // 修正：將 API URL 改為安全的 HTTPS
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 
                 const response = await fetch(apiUrl, {
