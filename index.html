@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線上塔羅牌占卜 (AI解讀)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Serif TC', serif;
+            background-color: #1B4965;
+            color: #f0f0f0;
+        }
+        .tarot-card {
+            background-color: #f8f9fa;
+            color: #1B4965;
+            border: 2px solid #dee2e6;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.5s, box-shadow 0.5s;
+            cursor: pointer;
+            aspect-ratio: 2.75 / 4.75;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            position: relative;
+        }
+        .tarot-card:hover {
+            transform: translateY(-10px) scale(1.05);
+            box-shadow: 0 8px 30px rgba(255, 255, 255, 0.2);
+        }
+        .tarot-card.reversed {
+            transform: rotate(180deg);
+        }
+        .card-back {
+            background-color: #1B4965;
+            background-image: 
+                linear-gradient(135deg, rgba(255,255,255,0.1) 25%, transparent 25%), 
+                linear-gradient(225deg, rgba(255,255,255,0.1) 25%, transparent 25%),
+                linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%),
+                linear-gradient(315deg, rgba(255,255,255,0.1) 25%, #1B4965 25%);
+            background-position: 10px 0, 10px 0, 0 0, 0 0;
+            background-size: 20px 20px;
+            background-repeat: repeat;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+        .card-name { font-weight: 700; font-size: 1.1rem; text-align: center; }
+        .card-arcana { font-size: 0.8rem; color: #557a95; margin-top: 0.25rem; }
+        .card-orientation { font-size: 0.9rem; color: #3a6381; margin-top: 0.5rem; font-weight: bold; }
+        .card-meaning { font-size: 0.85rem; text-align: center; color: #343a40; margin-top: 0.75rem; padding: 0.5rem; border-top: 1px solid #dee2e6; width: 100%; align-self: flex-end; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeIn 0.8s ease-out forwards; }
+        
+        #ai-modal {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+        }
+        #ai-modal-content {
+            max-height: 80vh;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="text-center mb-6">
+        <h1 class="text-4xl md:text-5xl font-bold text-white tracking-wider" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">
+            線上塔羅牌占卜
+        </h1>
+        <p class="text-lg text-gray-200 mt-2">專注內心，尋找指引</p>
+    </div>
+
+    <!-- 新增：問題輸入欄位 -->
+    <div class="w-full max-w-2xl mb-6">
+        <label for="userQuestion" class="block mb-2 text-lg text-white">請在此輸入您想問的問題：</label>
+        <textarea id="userQuestion" rows="3" class="w-full bg-gray-800 bg-opacity-50 border border-gray-400 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-white" placeholder="例如：我該如何改善我的事業運？"></textarea>
+    </div>
+
+    <div id="controls" class="mb-8 flex flex-col sm:flex-row items-center gap-4">
+        <div class="flex items-center">
+            <label for="cardCount" class="mr-2 text-lg text-white">抽牌張數：</label>
+            <select id="cardCount" class="bg-gray-800 bg-opacity-50 border border-gray-400 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-white">
+                <option value="1">1</option>
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+            </select>
+        </div>
+        <button id="drawButton" class="bg-white hover:bg-gray-200 text-lg font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition-all duration-300" style="color: #1B4965;">
+            開始抽牌
+        </button>
+    </div>
+
+    <div id="card-display" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 md:gap-8 max-w-6xl w-full">
+        <!-- 卡片將會顯示在這裡 -->
+    </div>
+
+    <div id="result-actions" class="mt-8 text-center h-12 flex items-center justify-center gap-4">
+        <button id="copyButton" class="hidden bg-white hover:bg-gray-200 text-base font-bold py-2 px-6 rounded-full shadow-md transition-all duration-300" style="color: #1B4965;">
+            複製牌陣結果
+        </button>
+        <button id="aiButton" class="hidden bg-gradient-to-r from-blue-400 to-purple-500 hover:from-blue-500 hover:to-purple-600 text-white text-base font-bold py-2 px-6 rounded-full shadow-lg transition-all duration-300">
+            ✨ AI 智慧解讀
+        </button>
+    </div>
+
+    <div id="initial-message" class="mt-8 text-center">
+        <p class="text-xl">牌陣尚未展開...</p>
+    </div>
+    
+    <!-- Gemini 解讀欄位 (彈出視窗) -->
+    <div id="ai-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div id="ai-modal-content" class="bg-white text-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl p-6 md:p-8 relative overflow-y-auto">
+            <button id="close-modal" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            <h2 class="text-2xl font-bold mb-4 text-center" style="color: #1B4965;">Gemini 智慧解讀</h2>
+            <div id="ai-response" class="prose max-w-none text-left whitespace-pre-wrap">
+                <!-- AI 回應會顯示在這裡 -->
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // 卡牌資料... (為節省空間省略)
+        const tarotDeck = [
+            { name: '愚者', arcana: '大阿爾克那', meaning: { upright: '開始、天真、潛力無限', reversed: '魯莽、冒險、不負責任' } },
+            { name: '魔術師', arcana: '大阿爾克那', meaning: { upright: '創造、意志、溝通', reversed: '欺騙、操縱、潛力未用' } },
+            { name: '女祭司', arcana: '大阿爾克那', meaning: { upright: '直覺、智慧、秘密', reversed: '隱藏、迷惘、直覺受阻' } },
+            { name: '皇后', arcana: '大阿爾克那', meaning: { upright: '豐盛、母性、創造力', reversed: '停滯、依賴、不安全感' } },
+            { name: '皇帝', arcana: '大阿爾克那', meaning: { upright: '權威、結構、領導', reversed: '專制、僵化、失控' } },
+            { name: '教皇', arcana: '大阿爾克那', meaning: { upright: '傳統、信仰、指導', reversed: '束縛、盲從、挑戰傳統' } },
+            { name: '戀人', arcana: '大阿爾克那', meaning: { upright: '選擇、愛情、和諧', reversed: '衝突、猶豫、錯誤選擇' } },
+            { name: '戰車', arcana: '大阿爾克那', meaning: { upright: '勝利、意志力、前進', reversed: '失控、衝突、方向錯誤' } },
+            { name: '力量', arcana: '大阿爾克那', meaning: { upright: '勇氣、耐心、內在力量', reversed: '軟弱、恐懼、缺乏自信' } },
+            { name: '隱者', arcana: '大阿爾克那', meaning: { upright: '內省、引導、智慧', reversed: '孤立、迷失、逃避' } },
+            { name: '命運之輪', arcana: '大阿爾克那', meaning: { upright: '轉變、機會、命運', reversed: '厄運、停滯、抗拒改變' } },
+            { name: '正義', arcana: '大阿爾克那', meaning: { upright: '公平、真理、因果', reversed: '不公、偏見、失衡' } },
+            { name: '吊人', arcana: '大阿爾克那', meaning: { upright: '犧牲、等待、新視角', reversed: '無謂犧牲、停滯不前' } },
+            { name: '死神', arcana: '大阿爾克那', meaning: { upright: '結束、轉變、重生', reversed: '抗拒改變、恐懼結束' } },
+            { name: '節制', arcana: '大阿爾克那', meaning: { upright: '平衡、和諧、耐心', reversed: '失衡、極端、缺乏耐心' } },
+            { name: '惡魔', arcana: '大阿爾克那', meaning: { upright: '束縛、慾望、物質主義', reversed: '解放、打破束縛、覺醒' } },
+            { name: '塔', arcana: '大阿爾克那', meaning: { upright: '突變、崩潰、啟示', reversed: '恐懼改變、避免災難' } },
+            { name: '星星', arcana: '大阿爾克那', meaning: { upright: '希望、靈感、治癒', reversed: '絕望、迷失方向、失望' } },
+            { name: '月亮', arcana: '大阿爾克那', meaning: { upright: '幻象、不安、潛意識', reversed: '清晰、真相大白、釋懷' } },
+            { name: '太陽', arcana: '大阿爾克那', meaning: { upright: '喜悅、成功、活力', reversed: '悲觀、暫時的困難' } },
+            { name: '審判', arcana: '大阿爾克那', meaning: { upright: '覺醒、重生、評估', reversed: '自我懷疑、逃避現實' } },
+            { name: '世界', arcana: '大阿爾克那', meaning: { upright: '完成、整合、成就', reversed: '未完成、停滯、空虛' } },
+            { name: '權杖一', arcana: '權杖', meaning: { upright: '新開始、創造力、靈感', reversed: '延遲、缺乏動力、錯失良機' } },
+            { name: '權杖二', arcana: '權杖', meaning: { upright: '計劃、未來、決策', reversed: '恐懼未知、缺乏計劃' } },
+            { name: '權杖三', arcana: '權杖', meaning: { upright: '擴展、遠見、領導力', reversed: '延誤、缺乏遠見、挫折' } },
+            { name: '權杖四', arcana: '權杖', meaning: { upright: '慶祝、和諧、家庭', reversed: '不穩定、家庭糾紛' } },
+            { name: '權杖五', arcana: '權杖', meaning: { upright: '競爭、衝突、挑戰', reversed: '避免衝突、尋求和解' } },
+            { name: '權杖六', arcana: '權杖', meaning: { upright: '勝利、認可、成功', reversed: '失敗、缺乏認可、驕傲自大' } },
+            { name: '權杖七', arcana: '權杖', meaning: { upright: '防禦、堅持、勇氣', reversed: '投降、不知所措、失去信心' } },
+            { name: '權杖八', arcana: '權杖', meaning: { upright: '迅速、行動、消息', reversed: '延遲、挫折、停滯' } },
+            { name: '權杖九', arcana: '權杖', meaning: { upright: '堅韌、防備、毅力', reversed: '精疲力竭、放棄、偏執' } },
+            { name: '權杖十', arcana: '權杖', meaning: { upright: '負擔、責任、壓力', reversed: '放下重擔、崩潰' } },
+            { name: '權杖侍者', arcana: '權杖', meaning: { upright: '熱情、探索、新消息', reversed: '壞消息、猶豫不決' } },
+            { name: '權杖騎士', arcana: '權杖', meaning: { upright: '活力、行動、冒險', reversed: '魯莽、衝動、延誤' } },
+            { name: '權杖皇后', arcana: '權杖', meaning: { upright: '自信、熱情、獨立', reversed: '嫉妒、不安全感、專橫' } },
+            { name: '權杖國王', arcana: '權杖', meaning: { upright: '領導力、遠見、決心', reversed: '專制、衝動、高傲' } },
+            { name: '聖杯一', arcana: '聖杯', meaning: { upright: '新感情、愛、創造力', reversed: '情感壓抑、空虛' } },
+            { name: '聖杯二', arcana: '聖杯', meaning: { upright: '結合、夥伴關係、愛', reversed: '分手、失衡、不和諧' } },
+            { name: '聖杯三', arcana: '聖杯', meaning: { upright: '慶祝、友誼、社群', reversed: '孤立、八卦、過度放縱' } },
+            { name: '聖杯四', arcana: '聖杯', meaning: { upright: '冷漠、沉思、錯失機會', reversed: '錯過機會、退縮' } },
+            { name: '聖杯五', arcana: '聖杯', meaning: { upright: '失落、悲傷、失望', reversed: '接受、原諒、向前看' } },
+            { name: '聖杯六', arcana: '聖杯', meaning: { upright: '懷舊、童年、純真', reversed: '停留在過去、不切實際' } },
+            { name: '聖杯七', arcana: '聖杯', meaning: { upright: '幻想、選擇、白日夢', reversed: '誘惑、幻滅、混亂' } },
+            { name: '聖杯八', arcana: '聖杯', meaning: { upright: '離開、尋求、轉變', reversed: '停滯、恐懼改變、漫無目的' } },
+            { name: '聖杯九', arcana: '聖杯', meaning: { upright: '願望成真、滿足、快樂', reversed: '不滿、貪婪、失望' } },
+            { name: '聖杯十', arcana: '聖杯', meaning: { upright: '幸福、家庭、和諧', reversed: '家庭不和、破碎的夢' } },
+            { name: '聖杯侍者', arcana: '聖杯', meaning: { upright: '直覺、新機會、信息', reversed: '情感不成熟、逃避' } },
+            { name: '聖杯騎士', arcana: '聖杯', meaning: { upright: '浪漫、魅力、理想主義', reversed: '情緒化、嫉妒、幻想' } },
+            { name: '聖杯皇后', arcana: '聖杯', meaning: { upright: '同情、直覺、溫柔', reversed: '情緒不穩、依賴' } },
+            { name: '聖杯國王', arcana: '聖杯', meaning: { upright: '情感成熟、控制、同情', reversed: '情緒操縱、喜怒無常' } },
+            { name: '寶劍一', arcana: '寶劍', meaning: { upright: '清晰、突破、真理', reversed: '混亂、誤解、殘酷' } },
+            { name: '寶劍二', arcana: '寶劍', meaning: { upright: '僵局、選擇、逃避', reversed: '優柔寡斷、困惑' } },
+            { name: '寶劍三', arcana: '寶劍', meaning: { upright: '心碎、悲傷、痛苦', reversed: '恢復、原諒、釋放痛苦' } },
+            { name: '寶劍四', arcana: '寶劍', meaning: { upright: '休息、恢復、沉思', reversed: '倦怠、停滯、孤立' } },
+            { name: '寶劍五', arcana: '寶劍', meaning: { upright: '衝突、失敗、不光彩', reversed: '和解、過去的怨恨' } },
+            { name: '寶劍六', arcana: '寶劍', meaning: { upright: '過渡、解脫、旅行', reversed: '停滯、未解決的問題' } },
+            { name: '寶劍七', arcana: '寶劍', meaning: { upright: '欺騙、策略、逃避', reversed: '坦白、良心發現' } },
+            { name: '寶劍八', arcana: '寶劍', meaning: { upright: '束縛、限制、受害者心態', reversed: '解放、自由、找到出路' } },
+            { name: '寶劍九', arcana: '寶劍', meaning: { upright: '焦慮、恐懼、噩夢', reversed: '釋放恐懼、尋求幫助' } },
+            { name: '寶劍十', arcana: '寶劍', meaning: { upright: '失敗、結束、背叛', reversed: '復甦、不可避免的結束' } },
+            { name: '寶劍侍者', arcana: '寶劍', meaning: { upright: '好奇、新思想、警惕', reversed: '八卦、諷刺、壞消息' } },
+            { name: '寶劍騎士', arcana: '寶劍', meaning: { upright: '野心、行動、速度', reversed: '魯莽、衝動、不擇手段' } },
+            { name: '寶劍皇后', arcana: '寶劍', meaning: { upright: '獨立、智慧、清晰', reversed: '冷酷、刻薄、孤立' } },
+            { name: '寶劍國王', arcana: '寶劍', meaning: { upright: '權威、真理、智慧', reversed: '專制、殘酷、不誠實' } },
+            { name: '錢幣一', arcana: '錢幣', meaning: { upright: '機會、繁榮、顯化', reversed: '錯失機會、財務不佳' } },
+            { name: '錢幣二', arcana: '錢幣', meaning: { upright: '平衡、適應、優先級', reversed: '失衡、混亂、財務困難' } },
+            { name: '錢幣三', arcana: '錢幣', meaning: { upright: '合作、團隊、技能', reversed: '缺乏合作、技能不足' } },
+            { name: '錢幣四', arcana: '錢幣', meaning: { upright: '保守、安全、控制', reversed: '貪婪、吝嗇、恐懼失去' } },
+            { name: '錢幣五', arcana: '錢幣', meaning: { upright: '貧困、孤立、逆境', reversed: '復甦、希望、幫助' } },
+            { name: '錢幣六', arcana: '錢幣', meaning: { upright: '慷慨、慈善、分享', reversed: '債務、自私、不公平' } },
+            { name: '錢幣七', arcana: '錢幣', meaning: { upright: '耐心、投資、回報', reversed: '缺乏回報、急躁' } },
+            { name: '錢幣八', arcana: '錢幣', meaning: { upright: '技能、勤奮、專注', reversed: '完美主義、缺乏野心' } },
+            { name: '錢幣九', arcana: '錢幣', meaning: { upright: '富足、獨立、享受成果', reversed: '依賴、財務損失' } },
+            { name: '錢幣十', arcana: '錢幣', meaning: { upright: '財富、家庭、傳承', reversed: '財務損失、家庭糾紛' } },
+            { name: '錢幣侍者', arcana: '錢幣', meaning: { upright: '學習、機會、新技能', reversed: '懶惰、錯失機會' } },
+            { name: '錢幣騎士', arcana: '錢幣', meaning: { upright: '可靠、勤奮、耐心', reversed: '無聊、停滯、固執' } },
+            { name: '錢幣皇后', arcana: '錢幣', meaning: { upright: '務實、滋養、穩定', reversed: '不安全感、嫉妒' } },
+            { name: '錢幣國王', arcana: '錢幣', meaning: { upright: '富裕、成功、安全', reversed: '貪婪、不誠實、專制' } }
+        ];
+
+        const drawButton = document.getElementById('drawButton');
+        const cardDisplay = document.getElementById('card-display');
+        const cardCountSelect = document.getElementById('cardCount');
+        const initialMessage = document.getElementById('initial-message');
+        const copyButton = document.getElementById('copyButton');
+        const aiButton = document.getElementById('aiButton');
+        const aiModal = document.getElementById('ai-modal');
+        const closeModalButton = document.getElementById('close-modal');
+        const aiResponseContainer = document.getElementById('ai-response');
+        const userQuestionInput = document.getElementById('userQuestion'); // 取得問題輸入框
+        
+        let currentResultText = '';
+        let rawResultForAI = '';
+
+        drawButton.addEventListener('click', () => {
+            const numberOfCards = parseInt(cardCountSelect.value, 10);
+            drawCards(numberOfCards);
+        });
+
+        copyButton.addEventListener('click', () => {
+            const textArea = document.createElement('textarea');
+            textArea.value = currentResultText;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                copyButton.textContent = '已複製！';
+                setTimeout(() => { copyButton.textContent = '複製牌陣結果'; }, 2000);
+            } catch (err) {
+                console.error('無法複製文字: ', err);
+                copyButton.textContent = '複製失敗';
+            }
+            document.body.removeChild(textArea);
+        });
+
+        aiButton.addEventListener('click', () => {
+            aiModal.classList.remove('hidden');
+            getAiInterpretation();
+        });
+
+        closeModalButton.addEventListener('click', () => {
+            aiModal.classList.add('hidden');
+        });
+
+        function shuffle(deck) {
+            let currentIndex = deck.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [deck[currentIndex], deck[randomIndex]] = [deck[randomIndex], deck[currentIndex]];
+            }
+            return deck;
+        }
+
+        function drawCards(num) {
+            cardDisplay.innerHTML = '';
+            initialMessage.style.display = 'none';
+            copyButton.classList.add('hidden');
+            aiButton.classList.add('hidden');
+            currentResultText = '';
+            rawResultForAI = '';
+
+            const shuffledDeck = shuffle([...tarotDeck]);
+            const drawnCards = shuffledDeck.slice(0, num);
+            
+            const results = [];
+            const aiResults = [];
+
+            drawnCards.forEach((card, index) => {
+                const isReversed = Math.random() < 0.5;
+                const orientationText = isReversed ? '【 逆位 】' : '【 正位 】';
+                const meaningText = isReversed ? card.meaning.reversed : card.meaning.upright;
+                
+                results.push(`${card.name} ${orientationText} - ${meaningText}`);
+                aiResults.push(`${card.name} ${orientationText}`);
+                
+                const cardBack = document.createElement('div');
+                cardBack.className = 'tarot-card card-back rounded-2xl w-full';
+                cardBack.style.animationDelay = `${index * 150}ms`;
+                cardBack.classList.add('fade-in');
+                cardDisplay.appendChild(cardBack);
+
+                setTimeout(() => {
+                    const cardFront = createCardFront(card, isReversed);
+                    cardDisplay.replaceChild(cardFront, cardBack);
+
+                    if (index === drawnCards.length - 1) {
+                        currentResultText = `我的抽牌結果是：\n${results.join('\n')}`;
+                        rawResultForAI = aiResults.join('、');
+                        copyButton.classList.remove('hidden');
+                        copyButton.classList.add('fade-in');
+                        aiButton.classList.remove('hidden');
+                        aiButton.classList.add('fade-in');
+                    }
+                }, 1000 + index * 300);
+            });
+        }
+        
+        function createCardFront(card, isReversed) {
+            const cardElement = document.createElement('div');
+            cardElement.className = 'tarot-card rounded-2xl w-full fade-in';
+            const cardContent = document.createElement('div');
+            cardContent.className = 'flex flex-col items-center';
+            const cardName = document.createElement('div');
+            cardName.className = 'card-name';
+            cardName.textContent = card.name;
+            const cardArcana = document.createElement('div');
+            cardArcana.className = 'card-arcana';
+            cardArcana.textContent = card.arcana;
+            const cardOrientation = document.createElement('div');
+            cardOrientation.className = 'card-orientation';
+            cardOrientation.textContent = isReversed ? '【 逆位 】' : '【 正位 】';
+            const cardMeaning = document.createElement('div');
+            cardMeaning.className = 'card-meaning';
+            cardMeaning.textContent = isReversed ? card.meaning.reversed : card.meaning.upright;
+            cardContent.appendChild(cardName);
+            cardContent.appendChild(cardArcana);
+            cardContent.appendChild(cardOrientation);
+            cardElement.appendChild(cardContent);
+            cardElement.appendChild(cardMeaning);
+            if (isReversed) {
+                cardElement.classList.add('reversed');
+                cardContent.style.transform = 'rotate(180deg)';
+                cardMeaning.style.transform = 'rotate(180deg)';
+            }
+            return cardElement;
+        }
+        
+        // 更新：呼叫 Gemini API 的函式，加入問題
+        async function getAiInterpretation() {
+            aiResponseContainer.innerHTML = '<div class="flex justify-center items-center p-8"><div class="spinner"></div><p class="ml-4">AI 正在為您解讀牌陣...</p></div>';
+            
+            const userQuestion = userQuestionInput.value.trim();
+            let prompt;
+
+            if (userQuestion) {
+                prompt = `你是一位專業、溫暖且富有洞察力的塔羅牌解讀師。使用者想問的問題是：「${userQuestion}」。\n\n他抽到的牌陣結果是：${rawResultForAI}。\n\n請針對他的問題，結合牌陣提供一段綜合性的解讀。請先總結牌陣的整體能量與核心訊息，然後逐一分析每張牌在牌陣中的位置所代表的意義，並說明它們之間如何相互影響，最後給予使用者一些具體的建議或指引。請用繁體中文回答。`;
+            } else {
+                prompt = `你是一位專業、溫暖且富有洞察力的塔羅牌解讀師。請根據使用者抽到的以下牌陣，提供一段綜合性的解讀（由於使用者沒有輸入問題，請提供一個通用的、全面的分析）。請先總結牌陣的整體能量與核心訊息，然後逐一分析每張牌在牌陣中的位置所代表的意義，並說明它們之間如何相互影響，最後給予使用者一些具體的建議或指引。請用繁體中文回答。\n\n牌陣結果：${rawResultForAI}`;
+            }
+
+            try {
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                const payload = { contents: chatHistory };
+                const apiKey = ""; // Canvas 會自動處理
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API 請求失敗，狀態碼：${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    aiResponseContainer.textContent = text;
+                } else {
+                    throw new Error('從API收到的回應格式不正確。');
+                }
+            } catch (error) {
+                console.error('AI 解讀失敗:', error);
+                aiResponseContainer.textContent = '抱歉，AI 解讀時發生錯誤，請稍後再試。';
+            }
+        }
+    </script>
+</body>
+</html>
